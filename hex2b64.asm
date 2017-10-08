@@ -12,7 +12,6 @@ hexnibble:
   push  rbp
   mov   rbp, rsp
   push  rcx
-  push  rax
   ;; stack now: rbp, ret addr, ptr param
   mov   rcx, [rbp + 4] ;; pointer to first of two characters
   mov   rax, [rcx] ;; dereference pointer
@@ -47,9 +46,8 @@ hexnibble:
   int   3
 
 .done_nibble:
-  ret
-  
-
+ 
+  pop rcx
   mov rsp, rbp
   pop rbp
   ret
