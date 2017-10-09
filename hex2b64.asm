@@ -2,6 +2,7 @@
 ; Solves the first of the cryptopal challenges:
 ; convert a hex string to base64
 ; ----------------------------------------------
+; :asmsyntax=nasm
 
 %define FIRST_ARG   [rbp + 0x10]
 %define SECOND_ARG  [rbp + 0x18]
@@ -151,8 +152,7 @@ hexnibble:
   jmp   .done_nibble
 
 .bad:
-  ;; trap
-  int   3
+  jmp   exit_fail
 
 .done_nibble:
  
@@ -226,6 +226,80 @@ init_mem:
   ret 
 
 
+%define b64char(i) [b64_chars + i] 
+base64:
+  push  rbp
+  mov   rbp, rsp
+  push  rsi
+  push  rdi
+  push  rcx
+  push  rbx
+  push  r8
+  xor   rax, rax
+  xor   rcx, rcx
+
+  mov   rsi, FIRST_ARG
+  mov   rdi, SECOND_ARG
+  mov   rbx, THIRD_ARG
+
+.loop:
+  
+  ;; load the first three bytes of the cleartext, in big-endian
+  mov   BYTE ah, [rsi]
+  shl   rax, 8
+  mov   BYTE ah, [rsi + 1]
+  mov   BYTE al, [rsi + 2]
+
+  ;; now take this 24bit number, and separate it into three 6bit nums
+
+  xor   cl, cl
+.loop2:
+  mov   r8, rax
+  shr   r8, cl
+  and   r8, 0b111111
+  push  r8
+  
+  cmp   cl, 18
+  jge   .done2
+  add   cl, 6
+  jmp   .loop2
+.done2:
+  ;; four 6 bit numbers are now on the stack
+  ;; now we write the encoded values to the *rdi buffer
+.loop3:
+  ;; 
+  pop   r8
+  mov   al, BYTE b64char(r8)
+  mov   [rdi], al
+
+  test  cl, cl
+  jz    .done3
+  sub   cl, 6
+  inc   rdi
+  jmp   .loop3 
+
+.done3:
+  
+  dec   rbx     ;; the main loop counter
+  test  rbx, rbx
+  jne   .loop
+
+  inc   rdi
+  mov   [rdi], BYTE 0x0A
+  pop   r8
+  pop   rbx
+  pop   rcx
+  pop   rdi
+  pop   rsi
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+  
+   
+
+
+
 decode_hexstring:
   push  rbp
   mov   rbp, rsp
@@ -294,25 +368,36 @@ _start:
   call  allocate
   mov   [b64_start], rax
 
-.breakpoint_0:
                                       ;; let's read the hex string into hex_start
   mov   rax, [hex_start]
   mov   rbx, STDIN
   call  readln
-  mov   bytes_read, rax                ;; store number of bytes read on stack 
+  dec   rax                           ;; we don't want to count the '\n' at the end
+  mov   bytes_read, rax               ;; store number of bytes read on stack 
                                       ;; printing hex back out, to test
   mov   rax, [hex_start]
   mov   rbx, STDOUT
   call  println
 
   mov   rax, bytes_read
-  dec   rax                           ;; we don't want to count the '\n' at the end
   push  QWORD rax
   push  QWORD [raw_start]
   push  QWORD [hex_start]
   
   call  decode_hexstring
 
+.breakpoint_0:
+  
+  mov   rax, bytes_read
+  push  QWORD rax
+  push  QWORD [b64_start]
+  push  QWORD [raw_start]
+ 
+  call  base64
+  
+  mov   rax, [b64_start]
+  mov   rbx, STDOUT
+  call  println
   jmp   exit_success
 
 
@@ -343,9 +428,10 @@ byte_size:
 b64_size:
   dd 0x1000
 
-stack_start:
-  dq 0x0000000000000000
+b64_chars:
+  db "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", 0x00
 
 test_msg:
   db "Hello, world!", 0x0A, 0x00
+
 
