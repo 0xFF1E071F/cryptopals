@@ -285,7 +285,7 @@ base64:
   jmp   .loop
 
 .done:
-  inc   rdi
+  ;inc   rdi
   mov   [rdi], BYTE 0x0A
   pop   r8
   pop   rbx
