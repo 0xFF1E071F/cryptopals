@@ -419,6 +419,7 @@ _start:
 .breakpoint_0:
   
   mov   rax, bytes_read
+  shr   rax, 1                        ;; two characters have been read for each byte, so divide by 2
   push  QWORD rax
   push  QWORD [b64_start]
   push  QWORD [raw_start]
