@@ -165,9 +165,9 @@ hexnibble:
 
 
 exit_success:
-  mov   rax, success_msg
-  mov   rbx, STDERR
-  call  println
+  ;mov   rax, success_msg
+  ;mov   rbx, STDERR
+  ;call  println
 
   mov   rax, SYS_EXIT
   mov   rdi, SUCCESS
@@ -238,18 +238,22 @@ base64:
   xor   rax, rax
   xor   rcx, rcx
 
-  mov   rsi, FIRST_ARG
-  mov   rdi, SECOND_ARG
-  mov   rbx, THIRD_ARG
+  mov   rsi, FIRST_ARG                  ;; source buffer of raw bytes
+  mov   rdi, SECOND_ARG                 ;; destination buffer for base64 bytes
+  mov   rbx, THIRD_ARG                  ;; length of raw byte buffer
 
 .loop:
+  test  rbx, rbx
+  jle   .done
   
   ;; load the first three bytes of the cleartext, in big-endian
+  xor   rax, rax
   mov   BYTE ah, [rsi]
   shl   rax, 8
   mov   BYTE ah, [rsi + 1]
   mov   BYTE al, [rsi + 2]
-
+  add   rsi, 3
+  sub   rbx, 3
   ;; now take this 24bit number, and separate it into three 6bit nums
 
   xor   cl, cl
@@ -267,23 +271,20 @@ base64:
   ;; four 6 bit numbers are now on the stack
   ;; now we write the encoded values to the *rdi buffer
 .loop3:
-  ;; 
-  pop   r8
-  mov   al, BYTE b64char(r8)
-  mov   [rdi], al
+  pop   r8                          ;; get the next base64 index
+  mov   al, BYTE b64char(r8)        ;; lookup the encoded character
+  mov   [rdi], al                   ;; write the encoded character to the b64 buffer
+  inc   rdi                         ;; increment the pointer to the encoded buffer
 
-  test  cl, cl
-  jz    .done3
-  sub   cl, 6
-  inc   rdi
+  test  cl, cl                      ;; check to see if we've handled all four cipher for these three clear
+  jle    .done3
+  sub   cl, 6                       ;; what we're doing here is counting down
   jmp   .loop3 
 
 .done3:
-  
-  dec   rbx     ;; the main loop counter
-  test  rbx, rbx
-  jne   .loop
+  jmp   .loop
 
+.done:
   inc   rdi
   mov   [rdi], BYTE 0x0A
   pop   r8
@@ -348,6 +349,27 @@ decode_hexstring:
   pop   rbp
   ret
 
+
+zerocool:
+
+  push  rbp
+  mov   rbp, rsp
+
+  mov   rax, FIRST_ARG
+  mov   rbx, SECOND_ARG
+
+.loop:
+  
+  mov   BYTE [rax], 0
+  inc   rax
+  dec   rbx
+  test  rbx, rbx
+  jg    .loop
+
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
 %define bytes_read [rbp - 4]
 _start:
   ;; first, let's look at the command line arguments
@@ -359,15 +381,23 @@ _start:
   push  0x1000
   call  allocate
   mov   [hex_start], rax
-  
+  push  0x1000
+  push  rax
+  call  zerocool
+
   push  0x2000
   call  allocate
   mov   [raw_start], rax
-  
+  push  0x2000
+  push  rax
+  call  zerocool
+
   push  0x1000
   call  allocate
   mov   [b64_start], rax
-
+  push  0x1000
+  push  rax
+  call  zerocool
                                       ;; let's read the hex string into hex_start
   mov   rax, [hex_start]
   mov   rbx, STDIN
@@ -375,9 +405,9 @@ _start:
   dec   rax                           ;; we don't want to count the '\n' at the end
   mov   bytes_read, rax               ;; store number of bytes read on stack 
                                       ;; printing hex back out, to test
-  mov   rax, [hex_start]
-  mov   rbx, STDOUT
-  call  println
+  ;mov   rax, [hex_start]
+  ;mov   rbx, STDOUT
+  ;call  println
 
   mov   rax, bytes_read
   push  QWORD rax
