@@ -32,17 +32,24 @@
 
   global _start
 
+  global println, readln, 
   section .text
 
-print0:
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+;; prints the buffer pointed to by rax, to the file descriptor in rbx ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+println:
   push  rbp
   mov   rbp, rsp
   push  rcx
   push  rdi
   push  rsi
   xor   rcx, rcx
-  mov   rsi, rax
+  
+  mov   rax, FIRST_ARG
+  mov   rbx, SECOND_ARG
 
+  mov   rsi, rax
   mov   rdi, rbx  ;; copy the file descriptor to rdi
   mov   rdx, 1    ;; one character at a time
 
@@ -69,7 +76,7 @@ print0:
   pop   rbp
   ret
 
-read0:
+readln:
   push  rbp
   mov   rbp, rsp
   push  rdi
@@ -78,6 +85,9 @@ read0:
 
   xor   rcx, rcx
   push  rcx
+  
+  mov   rax, FIRST_ARG
+  mov   rbx, SECOND_ARG
 
   mov   rsi, rax
   ;; rsi now points to the buffer to write to
@@ -113,9 +123,6 @@ read0:
   ret
 
   mov   rcx, rsi
-
-
-
 
 hexnibble:
   push  rbp
@@ -165,20 +172,21 @@ hexnibble:
   ;; value of nibble should be in rax
   ret
 
-
 exit_success:
   ;mov   rax, success_msg
   ;mov   rbx, STDERR
-  ;call  print0
+  ;call  println
 
   mov   rax, SYS_EXIT
   mov   rdi, SUCCESS
   syscall
 
 exit_fail:
-  mov   rax, fail_msg
-  mov   rbx, STDERR
-  call  print0
+  ;mov   rax, fail_msg
+  ;mov   rbx, STDERR
+  push  STDERR
+  push  fail_msg
+  call  println
 
   mov   rax, SYS_EXIT
   mov   rdi, FAILURE
@@ -186,8 +194,8 @@ exit_fail:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Basic memory allocation function. Expects size on stack. ;;
+;; Returns pointer to beginning of allocated memory.        ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 allocate:
   push  rbp
   mov   rbp, rsp
@@ -328,9 +336,10 @@ base64:
 
   
    
-
-
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Converts a hex-encoded string to a buffer of bytes half as long  ;;
+;; decode_hexstring(src, dst, count);                               ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 decode_hexstring:
   push  rbp
   mov   rbp, rsp
@@ -380,6 +389,9 @@ decode_hexstring:
   ret
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; memset to zero, basically ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 zerocool:
 
   push  rbp
@@ -429,15 +441,17 @@ _start:
   push  rax
   call  zerocool
                                       ;; let's read the hex string into hex_start
-  mov   rax, [hex_start]
-  mov   rbx, STDIN
-  call  read0
+  ;mov   rax, [hex_start]
+  ;mov   rbx, STDIN
+  push  QWORD STDIN
+  push  QWORD [hex_start]
+  call  readln
   dec   rax                           ;; we don't want to count the '\n' at the end
   mov   bytes_read, rax               ;; store number of bytes read on stack 
                                       ;; printing hex back out, to test
   ;mov   rax, [hex_start]
   ;mov   rbx, STDOUT
-  ;call  print0
+  ;call  println
 
   mov   rax, bytes_read
   push  QWORD rax
@@ -446,8 +460,6 @@ _start:
   
   call  decode_hexstring
 
-.breakpoint_0:
-  
   mov   rax, bytes_read
   shr   rax, 1                        ;; two characters have been read for each byte, so divide by 2
   push  QWORD rax
@@ -456,9 +468,11 @@ _start:
  
   call  base64
   
-  mov   rax, [b64_start]
-  mov   rbx, STDOUT
-  call  print0
+  ;mov   rax, [b64_start]
+  ;mov   rbx, STDOUT
+  push  STDOUT
+  push  QWORD [b64_start]
+  call  println
   jmp   exit_success
 
 
