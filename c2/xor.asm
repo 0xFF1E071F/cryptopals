@@ -32,10 +32,14 @@
 %define END_STRING 0x00
 
 global _start
+extern  println, readln, decode_hexstr
 
 section .text
 
 _start:
 
-  
+  mov   rbp, rsp
+  push  QWORD [rsp + 8]
+  call  println
+
 

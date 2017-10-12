@@ -36,8 +36,64 @@ section .text
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; prints the buffer pointed to by rax, to the file descriptor in rbx ;;
+;; parameters: buffer, stream, delimiter                              ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+print_to:
+  push  rbp
+  mov   rbp, rsp
+  push  rcx
+  push  rdi
+  push  rsi
+  push  r8
+  xor   rcx, rcx
+  
+  mov   rax, FIRST_ARG   ;; the buffer
+  mov   rbx, SECOND_ARG  ;; the stream
+  mov   r8,  THIRD_ARG   ;; the delimiter
+
+  mov   rsi, rax
+  mov   rdi, rbx  ;; copy the file descriptor to rdi
+  mov   rdx, 1    ;; one character at a time
+
+.loop:
+  mov   cl, BYTE [rsi]
+  mov   rax, r8
+  cmp   cl, al
+  mov   rax, SYS_WRITE
+  je    .done
+  syscall
+
+  inc   rsi
+  jmp   .loop
+    
+.done:
+;; last character: the newline
+  mov   rax, SYS_WRITE
+  mov   rcx, rsi
+  syscall
+
+  pop   r8
+  pop   rsi
+  pop   rdi
+  pop   rcx
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
 println:
+  push  rbp
+  mov   rbp, rsp
+  push  NEWLINE
+  push  QWORD SECOND_ARG
+  push  QWORD FIRST_ARG
+  call  print_to
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+
+;; Dispose of this on the next cleanup
+println_alt:
   push  rbp
   mov   rbp, rsp
   push  rcx
@@ -75,28 +131,30 @@ println:
   pop   rbp
   ret
 
-readln:
+read_to:
   push  rbp
   mov   rbp, rsp
   push  rdi
   push  rsi
   push  rcx   ;; counter
+  push  rdx
+  push  r8
+
 
   xor   rcx, rcx
   push  rcx
   
   mov   rax, FIRST_ARG
   mov   rbx, SECOND_ARG
+  mov   r8,  THIRD_ARG
 
   mov   rsi, rax
   ;; rsi now points to the buffer to write to
 
-  mov   rax, SYS_READ
   mov   rdi, rbx
 
-  mov   rdx, 1    ;; one char at a time
-
 .loop:  
+  mov   rdx, 1    ;; one char at a time
   mov   rax, SYS_READ
   syscall
   add   [rsp], rdx
@@ -105,7 +163,8 @@ readln:
   je    .done
 
   mov   al, BYTE [rsi]
-  cmp   al, BYTE NEWLINE
+  mov   rdx, r8
+  cmp   al, dl
   je    .done
 
   inc   rsi
@@ -114,6 +173,8 @@ readln:
 .done:
 
   pop   rax     ;; number of bytes written
+  pop   r8
+  pop   rdx
   pop   rcx
   pop   rsi
   pop   rdi
@@ -122,6 +183,18 @@ readln:
   ret
 
   mov   rcx, rsi
+
+readln:
+  push  rbp
+  mov   rbp, rsp
+  push  NEWLINE
+  push  QWORD SECOND_ARG
+  push  QWORD FIRST_ARG
+  call  read_to
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
 
 hexnibble:
   push  rbp
