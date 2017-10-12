@@ -4,6 +4,11 @@
 %define SECOND_ARG  [rbp + 0x18]
 %define THIRD_ARG   [rbp + 0x20]
 
+%define WORDSIZE    8
+%macro drop 1
+  add   rsp, (WORDSIZE * %1)
+%endmacro
+
 %define SYS_BRK     0x0C
 %define SYS_OPEN    0x02
 %define SYS_WRITE   0x01 ;0x04
@@ -26,7 +31,8 @@
 
 %define END_STRING 0x00
 
-global min, memset
+
+global min, memset, hexbyte
 global print_to, read_to, read0, print0, terpri, pos
 global println, readln, decode_hexstr, allocate, exit_fail, exit_success
 global zerocool, initial_break, current_break, base64
@@ -122,13 +128,17 @@ terpri:
   mov   rbp, rsp
   push  rdi
   push  rsi
+  push  rdx
+
   mov   rdi, FIRST_ARG
   push  NEWLINE
   mov   rsi, rsp
   mov   rax, SYS_WRITE
   mov   rdx, 1
   syscall
-  pop   rsi
+  drop  1
+
+  pop   rdx
   pop   rsi
   pop   rdi
   mov   rsp, rbp
@@ -146,6 +156,7 @@ print_to:
   push  rdi
   push  rsi
   push  r8
+  push  rdx
   xor   rcx, rcx
   
   mov   rax, FIRST_ARG   ;; the buffer
@@ -173,6 +184,7 @@ print_to:
 ;;  mov   rcx, rsi
 ;;  syscall
 
+  pop   rdx
   pop   r8
   pop   rsi
   pop   rdi
@@ -202,6 +214,7 @@ print0:
   push  QWORD SECOND_ARG
   push  QWORD FIRST_ARG
   call  print_to
+.break:
   mov   rsp, rbp
   pop   rbp
   ret
@@ -736,7 +749,7 @@ allbytes:
   mov   al, BYTE [rbx]
   push  rax
   call  rdx ;; predicate
-  sub   rsp, 8
+  drop	1
   test  rax, rax
   jz    .false
   inc   rbx
@@ -745,6 +758,47 @@ allbytes:
   jg    .loop
   ;; rax should have return value already in it
 .false:
+  pop   rdx
+  pop   rcx
+  pop   rbx
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+hexbyte:
+  push  rbp
+  mov   rbp, rsp
+  push  rbx
+  push  rcx
+  push  rdx
+  push  rsi
+  
+  mov   rax, FIRST_ARG    ;; byte
+  mov   rsi, SECOND_ARG   ;; buffer to write to
+
+  xor   rdx, rdx
+  inc   rdx
+  inc   rdx
+.loop:
+  mov   bl, al
+  and   bl, 0xF0
+  shr   bl, 4
+  cmp   bl, 0x0A
+  jge   .alpha
+  add   bl, 0x30
+  mov   BYTE [rsi], bl
+  jmp   .next
+.alpha:
+  add   bl, 0x37 
+  mov   BYTE [rsi], bl
+.next:
+  shl   rax, 4
+  inc   rsi
+  dec   rdx
+  test  rdx, rdx
+  jg    .loop
+  mov   BYTE [rsi + 1], 0x00
+  pop   rsi
   pop   rdx
   pop   rcx
   pop   rbx
