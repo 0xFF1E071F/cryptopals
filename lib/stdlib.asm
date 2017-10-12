@@ -1,7 +1,3 @@
-; ----------------------------------------------
-; Solves the first of the cryptopal challenges:
-; convert a hex string to base64
-; ----------------------------------------------
 ; :asmsyntax=nasm
 
 %define FIRST_ARG   [rbp + 0x10]
@@ -30,9 +26,75 @@
 
 %define END_STRING 0x00
 
+global min
+global print_to, read_to, read0, print0, terpri, pos
 global println, readln, decode_hexstr, allocate, exit_fail, exit_success
 global zerocool, initial_break, current_break, base64
 section .text
+
+min:
+  push  rbp
+  mov   rbp, rsp
+  push  rbx
+  mov   rbx, FIRST_ARG
+  mov   rax, SECOND_ARG
+  cmp   rax, rbx
+  jle   .done
+  mov   rax, rbx
+.done:
+  pop   rbx
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+
+
+;;;;;;;;;;
+;; first arg:  buffer
+;; second arg: byte
+;;;;;;;;;;;;;;;;;;;;;;
+pos:
+  push  rbp
+  mov   rbp, rsp
+  push  rcx
+  push  rsi
+  xor   rax, rax
+  mov   rsi, FIRST_ARG
+  mov   rcx, SECOND_ARG
+
+.loop:
+  cmp   cl, BYTE [rsi]
+  je    .done
+  inc   rax
+  inc   rsi
+  jmp   .loop
+.done:
+  pop   rsi
+  pop   rcx
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+;;;;;;;
+;; Prints a newline to fd in FIRST_ARG
+;;;;;;;
+terpri:
+  push  rbp
+  mov   rbp, rsp
+  push  rdi
+  push  rsi
+  mov   rdi, FIRST_ARG
+  push  NEWLINE
+  mov   rsi, rsp
+  mov   rax, SYS_WRITE
+  mov   rdx, 1
+  syscall
+  pop   rsi
+  pop   rsi
+  pop   rdi
+  mov   rsp, rbp
+  pop   rbp
+  ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; prints the buffer pointed to by rax, to the file descriptor in rbx ;;
@@ -68,9 +130,9 @@ print_to:
     
 .done:
 ;; last character: the newline
-  mov   rax, SYS_WRITE
-  mov   rcx, rsi
-  syscall
+;;  mov   rax, SYS_WRITE
+;;  mov   rcx, rsi
+;;  syscall
 
   pop   r8
   pop   rsi
@@ -84,6 +146,20 @@ println:
   push  rbp
   mov   rbp, rsp
   push  NEWLINE
+  push  QWORD SECOND_ARG
+  push  QWORD FIRST_ARG
+  call  print_to
+  push  QWORD SECOND_ARG
+  ;; might already be on the stack. check debugger.
+  call  terpri
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+print0:
+  push  rbp
+  mov   rbp, rsp
+  push  0x00
   push  QWORD SECOND_ARG
   push  QWORD FIRST_ARG
   call  print_to
@@ -188,6 +264,17 @@ readln:
   push  rbp
   mov   rbp, rsp
   push  NEWLINE
+  push  QWORD SECOND_ARG
+  push  QWORD FIRST_ARG
+  call  read_to
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+read0:
+  push  rbp
+  mov   rsp, rbp
+  push  0x00
   push  QWORD SECOND_ARG
   push  QWORD FIRST_ARG
   call  read_to
@@ -395,7 +482,7 @@ base64:
 .donepad:
   
   ;inc   rdi
-  mov   [rdi], BYTE 0x0A
+  mov   [rdi], BYTE NEWLINE
   pop   rdx
   pop   r8
   pop   rbx
@@ -423,7 +510,7 @@ decode_hexstr:
 
   mov   rsi, FIRST_ARG    ;; SRC
   mov   rdi, SECOND_ARG   ;; DST
-  mov   rcx, THIRD_ARG    ;; byte count
+  mov   rcx, THIRD_ARG    ;; byte count (of hex encoding)
 
   xor   r8, r8
   xor   r9, r9
