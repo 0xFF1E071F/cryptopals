@@ -26,12 +26,46 @@
 
 %define END_STRING 0x00
 
-global min
+global min, memset
 global print_to, read_to, read0, print0, terpri, pos
 global println, readln, decode_hexstr, allocate, exit_fail, exit_success
 global zerocool, initial_break, current_break, base64
-section .text
+global is_ascii, allbytes, memcpy, xorbufs
+;-------------;
+ section .data
+;-------------;
 
+fail_msg      db    "FAILED", 0x0A, 0x00
+success_msg   db    "SUCCESS", 0x0A, 0x00
+
+initial_break:
+  dq 0x0000000000000000
+current_break:
+  dq 0x0000000000000000
+
+hex_start:
+  dq 0x0000000000000000
+raw_start:
+  dq 0x0000000000000000
+b64_start:
+  dq 0x0000000000000000
+
+hex_size:
+  dd 0x1000
+byte_size:
+  dd 0x2000
+b64_size:
+  dd 0x1000
+
+b64_chars:
+  db "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", 0x00
+
+test_msg:
+  db "Hello, world!", 0x0A, 0x00
+
+;-=-=-=-=-=-=-;
+ section .text
+;-=-=-=-=-=-=-;
 min:
   push  rbp
   mov   rbp, rsp
@@ -40,14 +74,19 @@ min:
   mov   rax, SECOND_ARG
   cmp   rax, rbx
   jle   .done
-  mov   rax, rbx
+  xchg  rax, rbx
 .done:
   pop   rbx
   mov   rsp, rbp
   pop   rbp
   ret
 
-
+swpmin: ;; takes values in rax and rbx. sets smaller in rax, larger in rbx
+  cmp   rax, rbx
+  jle   .done
+  xchg  rax, rbx
+.done:
+  ret
 
 ;;;;;;;;;;
 ;; first arg:  buffer
@@ -571,36 +610,145 @@ zerocool:
   pop   rbp
   ret
 
-;-------------;
- section .data
-;-------------;
 
-fail_msg      db    "FAILED", 0x0A, 0x00
-success_msg   db    "SUCCESS", 0x0A, 0x00
+;;;;;
+;; memset (ptr, len, byte);
+;;;;
+memset:
+  
+  push  rbp
+  mov   rbp, rsp
+  push  rbx
+  push  rcx 
 
-initial_break:
-  dq 0x0000000000000000
-current_break:
-  dq 0x0000000000000000
+  mov   rax, FIRST_ARG   ;; pointer to memory
+  mov   rbx, SECOND_ARG  ;; length
+  mov   cl,  BYTE THIRD_ARG   ;; byte
 
-hex_start:
-  dq 0x0000000000000000
-raw_start:
-  dq 0x0000000000000000
-b64_start:
-  dq 0x0000000000000000
+.loop:
+  
+  mov   BYTE [rax], cl
+  inc   rax
+  dec   rbx
+  test  rbx, rbx
+  jg    .loop
 
-hex_size:
-  dd 0x1000
-byte_size:
-  dd 0x2000
-b64_size:
-  dd 0x1000
+  pop   rcx
+  pop   rbx
+  mov   rsp, rbp
+  pop   rbp
+  ret
 
-b64_chars:
-  db "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", 0x00
+memcpy:
+  push  rbp
+  mov   rbp, rsp
+  push  rbx
+  push  rcx
+  push  rdx
+  
+  xor   rdx, rdx
+  mov   rax, FIRST_ARG  ;; destination
+  mov   rbx, SECOND_ARG ;; source
+  mov   rcx, THIRD_ARG  ;; length
 
-test_msg:
-  db "Hello, world!", 0x0A, 0x00
+.loop:
+  mov   dl, BYTE [rbx]
+  mov   BYTE [rax], dl
+  dec   rcx
+  test  rcx, rcx
+  jg    .loop
 
+  pop   rcx
+  pop   rbx
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+;;;;;;
+;; xorbufs (&buf1, &mut buf2, len) 
+;;;;;
+xorbufs:
+;; destroys SECOND_ARG (well, sort of. it is just xor, after all)
+  push  rbp
+  mov   rbp, rsp
+  push  rsi
+  push  rcx
+  push  rdi
+  mov   rsi, FIRST_ARG   ;; buffer 1
+  mov   rax, SECOND_ARG  ;; buffer 2
+  mov   rcx, THIRD_ARG   ;; length
+  
+.loop:
+  ;; assuming that the length >= 1
+  mov   rdi, QWORD [rsi]
+  xor   QWORD [rax], rdi
+  add   rax, 8
+  add   rsi, 8
+  sub   rcx, 8
+  ;; note that this might overshoot the buffer. 
+  ;; but this should be harmless, so long as the buffers
+  ;; have at least a word of elbow room
+  test  rcx, rcx
+  jg    .loop 
+  
+  mov   rax, SECOND_ARG ;; send the pointer back to the start of buffer
+  pop   rdi
+  pop   rcx
+  pop   rsi
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+is_ascii:
+  push  rbp
+  mov   rbp, rsp
+  push  rbx
+  xor   rbx, rbx
+  mov   al, BYTE FIRST_ARG
+  sub   al, 0x20
+  test  al, al
+  jl    .no
+  add   al, 0x20
+  shr   al, 7
+  test  al, al
+  jg    .no
+  inc   rbx
+.no:
+  mov   rax, rbx
+  pop   rbx
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+;;
+;; allbytes(buffer, length, predicate) -> 1 or 0
+allbytes:
+  push  rbp
+  mov   rbp, rsp
+  push  rbx
+  push  rcx
+  push  rdx
+  mov   rbx, FIRST_ARG      ;; buffer
+  mov   rcx, SECOND_ARG     ;; length
+  mov   rdx, THIRD_ARG      ;; predicate
+.loop:
+  xor   rax, rax
+  mov   al, BYTE [rbx]
+  push  rax
+  call  rdx ;; predicate
+  sub   rsp, 8
+  test  rax, rax
+  jz    .false
+  inc   rbx
+  dec   rcx
+  test  rcx, rcx
+  jg    .loop
+  ;; rax should have return value already in it
+.false:
+  pop   rdx
+  pop   rcx
+  pop   rbx
+  mov   rsp, rbp
+  pop   rbp
+  ret
 
