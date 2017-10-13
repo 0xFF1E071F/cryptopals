@@ -36,7 +36,7 @@ global min, memset, hexbyte
 global print_to, read_to, read0, print0, terpri, pos
 global println, readln, decode_hexstr, allocate, exit_fail, exit_success
 global zerocool, initial_break, current_break, base64
-global is_ascii, allbytes, memcpy, xorbufs
+global is_ascii, allbytes, memcpy, xorbufs, hexword
 ;-------------;
  section .data
 ;-------------;
@@ -722,6 +722,8 @@ is_ascii:
   test  al, al
   jl    .no
   add   al, 0x20
+  cmp	al, 0x7E
+  je    .no
   shr   al, 7
   test  al, al
   jg    .no
@@ -779,6 +781,7 @@ hexbyte:
   xor   rdx, rdx
   inc   rdx
   inc   rdx
+
 .loop:
   mov   bl, al
   and   bl, 0xF0
@@ -797,6 +800,7 @@ hexbyte:
   dec   rdx
   test  rdx, rdx
   jg    .loop
+
   mov   BYTE [rsi + 1], 0x00
   pop   rsi
   pop   rdx
@@ -805,4 +809,41 @@ hexbyte:
   mov   rsp, rbp
   pop   rbp
   ret
+
+;; not the most efficient thing, but w/e
+hexword:
+  push  rbp
+  mov   rbp, rsp
+  sub   rsp, 0x10
+  push  rbx
+  push  rcx
+  
+  mov   rcx, FIRST_ARG  ;; word
+  mov   rbx, SECOND_ARG ;; buffer
+  xor   rax, rax
+  add   rax, 8
+  add   rbx, 14
+.loop:
+  push  rax
+  push  rbp
+  push  rcx
+  call  hexbyte
+  drop  2
+  mov   WORD ax, [rbp]   ;; needed to strip of null byte
+  mov   [rbx], WORD ax
+  pop   rax
+  shr   rcx, 8
+  dec   rbx
+  dec   rbx
+  dec   rax
+  test  rax, rax
+  jg    .loop
+
+  pop   rcx
+  pop   rbx
+  mov   rsp, rbp
+  pop   rbp
+  ret
+
+
 
